@@ -23,9 +23,11 @@
     
     .image-canvas-container {
       position: relative; 
-      max-width: 90%; 
-      max-height: 70vh;
-      margin: 2rem auto; 
+      width: 95vw;
+      max-width: 600px;
+      height: 60vh;
+      min-height: 400px;
+      margin: 1rem auto; 
       border: 2px solid rgba(255, 255, 255, 0.3);
       border-radius: 1.5rem; 
       overflow: hidden;
@@ -234,16 +236,16 @@
       <div class="grid md:grid-cols-2 gap-6">
         <div>
           <label class="block text-sm font-semibold instruction-text mb-3">
-            🐭 Capybara Size: <span id="capybaraSizeLabel" class="text-blue-200">100</span> px
+            🐭 Capybara Size: <span id="capybaraSizeLabel" class="text-blue-200">150</span> px
           </label>
-          <input type="range" id="capybaraSizeSlider" min="50" max="300" value="100" 
+          <input type="range" id="capybaraSizeSlider" min="100" max="400" value="150" 
                  class="modern-slider w-full">
         </div>
         <div>
           <label class="block text-sm font-semibold instruction-text mb-3">
-            💩 Poo Size: <span id="pooSizeLabel" class="text-blue-200">50</span> px
+            💩 Poo Size: <span id="pooSizeLabel" class="text-blue-200">80</span> px
           </label>
-          <input type="range" id="pooSizeSlider" min="20" max="150" value="50" 
+          <input type="range" id="pooSizeSlider" min="40" max="200" value="80" 
                  class="modern-slider w-full">
         </div>
       </div>
@@ -296,8 +298,8 @@
     const pooSizeLabel = document.getElementById('pooSizeLabel');
     const countdownOverlay = document.getElementById('countdownOverlay');
 
-    let capybara = { x: 0, y: 0, size: 100, visible: false };
-    let poo = { x: 0, y: 0, size: 50, visible: false };
+    let capybara = { x: 0, y: 0, size: 150, visible: false };
+    let poo = { x: 0, y: 0, size: 80, visible: false };
     let dragging = false;
     let dropTarget = null;
     let squirtyPoos = [];
@@ -566,8 +568,17 @@
         uploadedImage.src = event.target.result;
         uploadedImage.onload = () => {
           document.getElementById('interactiveArea').classList.remove('hidden');
-          overlayCanvas.width = uploadedImage.naturalWidth;
-          overlayCanvas.height = uploadedImage.naturalHeight;
+          
+          // Size canvas to container, not natural image size
+          const container = document.getElementById('interactiveArea');
+          const containerRect = container.getBoundingClientRect();
+          overlayCanvas.width = containerRect.width;
+          overlayCanvas.height = containerRect.height;
+          
+          // Also set canvas display size to match
+          overlayCanvas.style.width = '100%';
+          overlayCanvas.style.height = '100%';
+          
           drawScene();
           document.getElementById('addCapybaraBtn').disabled = false;
           document.getElementById('clearBtn').disabled = false;
@@ -588,22 +599,23 @@
       overlayCanvas.style.cursor = 'crosshair';
       
       const handleClick = (e) => {
-        const rect = overlayCanvas.getBoundingClientRect();
-        const scaleX = overlayCanvas.width / rect.width;
-        const scaleY = overlayCanvas.height / rect.height;
+        e.preventDefault();
+        const coords = getEventCoordinates(e);
         
         dropTarget = {
-          x: (e.clientX - rect.left) * scaleX,
-          y: (e.clientY - rect.top) * scaleY
+          x: coords.x,
+          y: coords.y
         };
         
         document.getElementById('dropPooBtn').disabled = false;
         overlayCanvas.style.cursor = 'default';
         overlayCanvas.removeEventListener('click', handleClick);
+        overlayCanvas.removeEventListener('touchstart', handleClick);
         drawScene(); // Redraw to show target
       };
       
       overlayCanvas.addEventListener('click', handleClick);
+      overlayCanvas.addEventListener('touchstart', handleClick);
     });
 
     document.getElementById('dropPooBtn').addEventListener('click', () => {
@@ -644,16 +656,32 @@
       drawScene();
     });
 
-    // Enhanced capybara dragging with proper coordinate scaling
-    overlayCanvas.addEventListener('mousedown', (e) => {
-      if (!capybara.visible) return;
-      
+    // Enhanced capybara dragging with proper coordinate scaling and touch support
+    function getEventCoordinates(e) {
       const rect = overlayCanvas.getBoundingClientRect();
       const scaleX = overlayCanvas.width / rect.width;
       const scaleY = overlayCanvas.height / rect.height;
       
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
+      let clientX, clientY;
+      if (e.type.startsWith('touch')) {
+        clientX = e.touches[0]?.clientX || e.changedTouches[0]?.clientX;
+        clientY = e.touches[0]?.clientY || e.changedTouches[0]?.clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
+
+    function handleStart(e) {
+      if (!capybara.visible) return;
+      e.preventDefault();
+      
+      const coords = getEventCoordinates(e);
       
       // Use proper capybara dimensions for hit detection
       const capybaraWidth = capybara.size;
@@ -661,23 +689,18 @@
       const halfWidth = capybaraWidth / 2;
       const halfHeight = capybaraHeight / 2;
       
-      if (x > capybara.x - halfWidth && x < capybara.x + halfWidth && 
-          y > capybara.y - halfHeight && y < capybara.y + halfHeight) {
+      if (coords.x > capybara.x - halfWidth && coords.x < capybara.x + halfWidth && 
+          coords.y > capybara.y - halfHeight && coords.y < capybara.y + halfHeight) {
         dragging = true;
         overlayCanvas.style.cursor = 'grabbing';
       }
-    });
+    }
 
-    overlayCanvas.addEventListener('mousemove', (e) => {
+    function handleMove(e) {
       if (!dragging) {
-        // Change cursor when hovering over capybara
-        if (capybara.visible) {
-          const rect = overlayCanvas.getBoundingClientRect();
-          const scaleX = overlayCanvas.width / rect.width;
-          const scaleY = overlayCanvas.height / rect.height;
-          
-          const x = (e.clientX - rect.left) * scaleX;
-          const y = (e.clientY - rect.top) * scaleY;
+        // Change cursor when hovering over capybara (mouse only)
+        if (capybara.visible && e.type === 'mousemove') {
+          const coords = getEventCoordinates(e);
           
           // Use proper capybara dimensions for hover detection
           const capybaraWidth = capybara.size;
@@ -685,8 +708,8 @@
           const halfWidth = capybaraWidth / 2;
           const halfHeight = capybaraHeight / 2;
           
-          if (x > capybara.x - halfWidth && x < capybara.x + halfWidth && 
-              y > capybara.y - halfHeight && y < capybara.y + halfHeight) {
+          if (coords.x > capybara.x - halfWidth && coords.x < capybara.x + halfWidth && 
+              coords.y > capybara.y - halfHeight && coords.y < capybara.y + halfHeight) {
             overlayCanvas.style.cursor = 'grab';
           } else {
             overlayCanvas.style.cursor = 'default';
@@ -695,12 +718,11 @@
         return;
       }
       
-      const rect = overlayCanvas.getBoundingClientRect();
-      const scaleX = overlayCanvas.width / rect.width;
-      const scaleY = overlayCanvas.height / rect.height;
+      e.preventDefault();
+      const coords = getEventCoordinates(e);
       
-      capybara.x = (e.clientX - rect.left) * scaleX;
-      capybara.y = (e.clientY - rect.top) * scaleY;
+      capybara.x = coords.x;
+      capybara.y = coords.y;
       
       // Keep capybara within bounds using proper dimensions
       const capybaraWidth = capybara.size;
@@ -712,16 +734,36 @@
       capybara.y = Math.max(halfHeight, Math.min(overlayCanvas.height - halfHeight, capybara.y));
       
       drawScene();
-    });
+    }
 
-    overlayCanvas.addEventListener('mouseup', () => {
+    function handleEnd(e) {
       dragging = false;
       overlayCanvas.style.cursor = 'default';
-    });
+    }
 
-    overlayCanvas.addEventListener('mouseleave', () => {
-      dragging = false;
-      overlayCanvas.style.cursor = 'default';
+    // Mouse events
+    overlayCanvas.addEventListener('mousedown', handleStart);
+    overlayCanvas.addEventListener('mousemove', handleMove);
+    overlayCanvas.addEventListener('mouseup', handleEnd);
+    overlayCanvas.addEventListener('mouseleave', handleEnd);
+
+    // Touch events
+    overlayCanvas.addEventListener('touchstart', handleStart, { passive: false });
+    overlayCanvas.addEventListener('touchmove', handleMove, { passive: false });
+    overlayCanvas.addEventListener('touchend', handleEnd);
+    overlayCanvas.addEventListener('touchcancel', handleEnd);
+
+    // Handle window resize for mobile orientation changes
+    window.addEventListener('resize', () => {
+      if (uploadedImage.src && !document.getElementById('interactiveArea').classList.contains('hidden')) {
+        setTimeout(() => {
+          const container = document.getElementById('interactiveArea');
+          const containerRect = container.getBoundingClientRect();
+          overlayCanvas.width = containerRect.width;
+          overlayCanvas.height = containerRect.height;
+          drawScene();
+        }, 100);
+      }
     });
   </script>
 </body>
